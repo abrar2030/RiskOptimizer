@@ -8,9 +8,7 @@ from typing import Any, Dict, List
 from src.core.exceptions import ValidationError
 
 
-def validate_returns_data(
-    returns: "np.ndarray | pd.DataFrame | list", field_name: str = "returns"
-) -> List[float]:
+def validate_returns_data(returns: Any, field_name: str = "returns") -> List[float]:
     """
     Validate returns data.
 

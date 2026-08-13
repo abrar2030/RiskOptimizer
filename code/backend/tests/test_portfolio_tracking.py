@@ -109,9 +109,15 @@ class TestPortfolioTracking:
     ) -> None:
         """Test portfolio retrieval from blockchain (mocked)."""
         mock_contract = MagicMock()
+        # PortfolioTracker.getPortfolio returns
+        # (assets, allocations, updatedAt, version) on-chain; the mock must
+        # match that 4-value shape or BlockchainService.get_portfolio's
+        # unpacking will fail exactly as it would against the real contract.
         mock_contract.functions.getPortfolio.return_value.call.return_value = (
             sample_portfolio["assets"],
             [int(alloc * 10000) for alloc in sample_portfolio["allocations"]],
+            1_700_000_000,
+            1,
         )
         mock_web3.return_value.eth.contract.return_value = mock_contract
         mock_web3.return_value.is_connected.return_value = True
@@ -124,6 +130,8 @@ class TestPortfolioTracking:
         assert result is not None
         assert result["user_address"] == sample_portfolio["user_address"]
         assert result["assets"] == sample_portfolio["assets"]
+        assert result["updated_at"] == 1_700_000_000
+        assert result["version"] == 1
         for i, alloc in enumerate(result["allocations"]):
             assert abs(alloc - sample_portfolio["allocations"][i]) < 0.0001
 

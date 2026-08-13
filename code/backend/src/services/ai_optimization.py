@@ -13,6 +13,18 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
+# quant_ml lives at code/quant_ml, a sibling of code/backend (this file is
+# code/backend/src/services/ai_optimization.py). sys.path must be extended
+# *before* attempting the import below, otherwise the import always fails
+# and AdvancedPortfolioOptimizer silently falls back to None even when
+# quant_ml is present on disk. Four levels up from this file reaches
+# code/ (matching the equivalent fix in blockchain_service.py's proxy).
+_PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.append(_PROJECT_ROOT)
+
 try:
     from quant_ml.ai_models.optimization_model import AdvancedPortfolioOptimizer
 except ImportError:
@@ -24,15 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-
-MODEL_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "quant_ml",
-    "ai_models",
-)
+MODEL_DIR = os.path.join(_PROJECT_ROOT, "quant_ml", "ai_models")
 DEFAULT_MODEL_PATH = os.path.join(MODEL_DIR, "trained_model.joblib")
 
 

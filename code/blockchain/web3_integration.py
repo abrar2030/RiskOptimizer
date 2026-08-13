@@ -6,10 +6,14 @@ from web3 import Web3
 logger = logging.getLogger(__name__)
 GANACHE_URL = "http://127.0.0.1:8545"
 MOCK_CONTRACT_ADDRESS = "0x9fE46736679d2D9a65F0992F2272E2fA8C57Bf70"
+# Mirrors the real PortfolioLedger.sol ABI. recordTransaction takes no
+# _userAddress parameter: the contract derives the caller from msg.sender
+# (see PortfolioLedger.sol), so an ABI with a leading address parameter here
+# would encode calls that revert (or silently call the wrong function) against
+# the real deployed contract.
 MOCK_ABI = [
     {
         "inputs": [
-            {"internalType": "address", "name": "_userAddress", "type": "address"},
             {"internalType": "string", "name": "_transactionType", "type": "string"},
             {"internalType": "string", "name": "_assetTicker", "type": "string"},
             {"internalType": "uint256", "name": "_quantity", "type": "uint256"},
@@ -72,8 +76,12 @@ def record_trade_on_blockchain(
         )
         return
     logger.info(f"\nRecording transaction from {sender_account}...")
+    # PortfolioLedger.recordTransaction has no _userAddress parameter: the
+    # contract attributes the transaction to msg.sender (sender_account)
+    # rather than an address passed in as an argument. user_address is kept
+    # as a function parameter here only for local logging/context.
     contract.functions.recordTransaction(
-        user_address, tx_type, ticker, quantity_wei, price_wei, notes
+        tx_type, ticker, quantity_wei, price_wei, notes
     ).build_transaction(
         {
             "from": sender_account,
@@ -83,8 +91,10 @@ def record_trade_on_blockchain(
     )
     logger.info("Mock Transaction Built (would be sent to the network):")
     logger.info(
-        f"  Function: recordTransaction('{user_address}', '{tx_type}', '{ticker}', {quantity_wei}, {price_wei}, '{notes}')"
+        f"  Function: recordTransaction('{tx_type}', '{ticker}', {quantity_wei}, {price_wei}, '{notes}')"
     )
+    logger.info(f"  Attributed on-chain to (msg.sender): {sender_account}")
+    logger.info(f"  Logical portfolio owner: {user_address}")
     mock_tx_hash = "0x" + os.urandom(32).hex()
     logger.info(f"  Mock Transaction Hash: {mock_tx_hash}")
     logger.info("Transaction successfully recorded on the mock blockchain.")

@@ -168,7 +168,7 @@ class MLRiskModel:
         feature_window: int = 10,
         horizon: int = 1,
         test_size: object = 0.2,
-    ) -> object:
+    ) -> "MLRiskModel":
         """
         Fit the ML model to return data
 
@@ -383,9 +383,7 @@ class CopulaMLRiskModel:
             }
         return marginals
 
-    def fit(
-        self, returns: "np.ndarray | pd.DataFrame | list"
-    ) -> "MLRiskModel | HybridRiskModel | ExtremeValueRisk":
+    def fit(self, returns: "np.ndarray | pd.DataFrame | list") -> "CopulaMLRiskModel":
         """
         Fit the copula model to return data
 
@@ -662,7 +660,7 @@ class HybridRiskModel:
         returns: "np.ndarray | pd.DataFrame | list",
         feature_window: int = 10,
         horizon: int = 1,
-    ) -> "MLRiskModel | HybridRiskModel | ExtremeValueRisk":
+    ) -> "HybridRiskModel":
         """
         Fit the hybrid model to return data
 

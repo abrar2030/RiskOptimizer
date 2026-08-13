@@ -9,6 +9,7 @@ from flasgger import Swagger
 from flask import Flask, jsonify
 from flask_cors import CORS
 from src.api.controllers.auth_controller import auth_bp
+from src.api.controllers.blockchain_controller import blockchain_bp
 from src.api.controllers.monitoring_controller import monitoring_bp
 from src.api.controllers.portfolio_controller import portfolio_bp
 from src.api.controllers.risk_controller import risk_bp
@@ -60,6 +61,7 @@ def create_app() -> Flask:
     app.register_blueprint(portfolio_bp)
     app.register_blueprint(risk_bp)
     app.register_blueprint(monitoring_bp)
+    app.register_blueprint(blockchain_bp)
 
     # Apply rate limiting to API endpoints
     apply_rate_limiting(app)

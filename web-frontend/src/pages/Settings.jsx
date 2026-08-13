@@ -1,4 +1,5 @@
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import LinkIcon from "@mui/icons-material/Link";
 import LockIcon from "@mui/icons-material/Lock";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import SaveIcon from "@mui/icons-material/Save";
@@ -11,6 +12,8 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Chip,
+  CircularProgress,
   Divider,
   FormControlLabel,
   Grid,
@@ -22,6 +25,7 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import apiService from "../services/apiService";
 import { formatAddress } from "../utils/formatters";
 
 const Settings = () => {
@@ -48,6 +52,12 @@ const Settings = () => {
     severity: "success",
   });
 
+  const [onchainCheck, setOnchainCheck] = useState({
+    status: "idle", // idle | loading | found | not_found | error
+    data: null,
+    message: "",
+  });
+
   // Correct handler for text fields
   const handleAccountChange = (field) => (e) => {
     setAccount((prev) => ({ ...prev, [field]: e.target.value }));
@@ -71,6 +81,35 @@ const Settings = () => {
   };
 
   const walletAddress = user?.wallet_address || user?.address || "";
+
+  const handleVerifyOnchain = async () => {
+    if (!walletAddress) return;
+    setOnchainCheck({ status: "loading", data: null, message: "" });
+    try {
+      const res = await apiService.portfolio.getOnchain(walletAddress);
+      setOnchainCheck({
+        status: "found",
+        data: res.data || res,
+        message: "",
+      });
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 404) {
+        setOnchainCheck({
+          status: "not_found",
+          data: null,
+          message:
+            "No portfolio has been recorded on-chain for this wallet yet.",
+        });
+      } else {
+        setOnchainCheck({
+          status: "error",
+          data: null,
+          message: err.message || "Could not reach the blockchain node.",
+        });
+      }
+    }
+  };
 
   return (
     <Box className="fade-in">
@@ -113,6 +152,77 @@ const Settings = () => {
                   walletAddress ? `Full: ${walletAddress}` : "Not connected"
                 }
               />
+
+              {walletAddress && (
+                <Box sx={{ mt: 2 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1.5,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={
+                        onchainCheck.status === "loading" ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <LinkIcon />
+                        )
+                      }
+                      onClick={handleVerifyOnchain}
+                      disabled={onchainCheck.status === "loading"}
+                    >
+                      Verify On-Chain Portfolio
+                    </Button>
+                    {onchainCheck.status === "found" && (
+                      <Chip
+                        size="small"
+                        color="success"
+                        label={`Found on-chain (v${onchainCheck.data?.version ?? "?"})`}
+                      />
+                    )}
+                    {onchainCheck.status === "not_found" && (
+                      <Chip
+                        size="small"
+                        color="warning"
+                        label="Not found on-chain"
+                      />
+                    )}
+                    {onchainCheck.status === "error" && (
+                      <Chip
+                        size="small"
+                        color="error"
+                        label="Blockchain unreachable"
+                      />
+                    )}
+                  </Box>
+                  {onchainCheck.status === "found" && onchainCheck.data && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 1 }}
+                    >
+                      Assets: {onchainCheck.data.assets?.join(", ") || "—"} on{" "}
+                      {onchainCheck.data.network || "chain"}
+                    </Typography>
+                  )}
+                  {(onchainCheck.status === "not_found" ||
+                    onchainCheck.status === "error") && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 1 }}
+                    >
+                      {onchainCheck.message}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
               <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
                 <Button
                   variant="contained"

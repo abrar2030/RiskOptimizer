@@ -12,7 +12,12 @@ from src.api.schemas.portfolio_schema import (
     validate_portfolio_request,
     validate_portfolio_update_request,
 )
-from src.core.exceptions import NotFoundError, RiskOptimizerException, ValidationError
+from src.core.exceptions import (
+    BlockchainError,
+    NotFoundError,
+    RiskOptimizerException,
+    ValidationError,
+)
 from src.domain.services.portfolio_service import portfolio_service
 from src.utils.pagination import create_paginated_response
 
@@ -42,7 +47,7 @@ portfolio_bp = Blueprint("portfolio", __name__, url_prefix="/api/v1/portfolios")
 
 
 def create_success_response(
-    data: "np.ndarray | pd.DataFrame | list",
+    data: Any,
     message: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -164,6 +169,106 @@ def get_portfolio(user_address: str) -> Response:
     except Exception as e:
         logger.error(
             f"Unexpected error getting portfolio for address {user_address}: {str(e)}",
+            exc_info=True,
+        )
+        error = RiskOptimizerException(
+            f"Internal server error: {str(e)}", "INTERNAL_ERROR"
+        )
+        response = create_error_response(error)
+        return jsonify(response), 500
+
+
+@portfolio_bp.route("/address/<user_address>/onchain", methods=["GET"])
+@jwt_required()
+def get_onchain_portfolio(user_address: str) -> Response:
+    """
+    Get a user's portfolio directly from the blockchain (PortfolioTracker
+    contract), independent of the database-backed portfolio returned by
+    GET /address/<user_address>.
+    ---
+    parameters:
+        - in: path
+          name: user_address
+          type: string
+          required: true
+          description: The wallet address of the user whose on-chain portfolio is to be retrieved.
+    responses:
+        200:
+            description: On-chain portfolio data retrieved successfully.
+            schema:
+                type: object
+                properties:
+                    status:
+                        type: string
+                    message:
+                        type: string
+                    data:
+                        type: object
+                        properties:
+                            user_address:
+                                type: string
+                            assets:
+                                type: array
+                                items:
+                                    type: string
+                            allocations:
+                                type: array
+                                items:
+                                    type: number
+                            version:
+                                type: integer
+                            updated_at:
+                                type: integer
+        400:
+            description: Invalid address.
+        404:
+            description: No portfolio has been recorded on-chain for this address.
+        502:
+            description: Blockchain node unreachable or the call failed.
+    """
+    try:
+        logger.info(f"Get on-chain portfolio request for address: {user_address}")
+
+        onchain_data = portfolio_service.get_onchain_portfolio(user_address)
+
+        response = create_success_response(
+            data=onchain_data, message="On-chain portfolio retrieved successfully"
+        )
+
+        logger.info(
+            f"On-chain portfolio retrieved successfully for address: {user_address}"
+        )
+        return jsonify(response), 200
+
+    except NotFoundError as e:
+        logger.warning(f"On-chain portfolio not found for address {user_address}")
+        response = create_error_response(e)
+        return jsonify(response), 404
+
+    except ValidationError as e:
+        logger.warning(f"Validation error for address {user_address}: {str(e)}")
+        response = create_error_response(e)
+        return jsonify(response), 400
+
+    except BlockchainError as e:
+        logger.error(
+            f"Blockchain error getting on-chain portfolio for address {user_address}: {str(e)}",
+            exc_info=True,
+        )
+        response = create_error_response(e)
+        return jsonify(response), 502
+
+    except RiskOptimizerException as e:
+        logger.error(
+            f"Error getting on-chain portfolio for address {user_address}: {str(e)}",
+            exc_info=True,
+        )
+        response = create_error_response(e)
+        return jsonify(response), 500
+
+    except Exception as e:
+        logger.error(
+            f"Unexpected error getting on-chain portfolio for address {user_address}: {str(e)}",
             exc_info=True,
         )
         error = RiskOptimizerException(

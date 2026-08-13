@@ -20,7 +20,7 @@ monitoring_bp = Blueprint("monitoring", __name__, url_prefix="/api/v1/monitoring
 
 
 def create_success_response(
-    data: "np.ndarray | pd.DataFrame | list",
+    data: Any,
     message: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:

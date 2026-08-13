@@ -270,6 +270,74 @@ class TestPortfolioAPI(unittest.TestCase):
             f"Expected 404, got {get_response.status_code}: {get_response.data}",
         )
 
+    def test_7_get_onchain_portfolio(self):
+        """GET /portfolios/address/<addr>/onchain → 200 with on-chain data."""
+        onchain_portfolio = {
+            "user_address": self.user_address,
+            "assets": ["BTC", "ETH"],
+            "allocations": [0.6, 0.4],
+            "updated_at": 1_700_000_000,
+            "version": 1,
+            "source": "blockchain",
+            "network": "Custom (BLOCKCHAIN_PROVIDER)",
+        }
+        with patch(
+            "src.domain.services.portfolio_service.portfolio_service.get_onchain_portfolio",
+            return_value=onchain_portfolio,
+        ):
+            response = self.client.get(
+                f"/api/v1/portfolios/address/{self.user_address}/onchain",
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(
+            response.status_code,
+            200,
+            f"Expected 200, got {response.status_code}: {response.data}",
+        )
+        payload = response.get_json().get("data", response.get_json())
+        self.assertEqual(payload["assets"], ["BTC", "ETH"])
+        self.assertEqual(payload["version"], 1)
+
+    def test_8_get_onchain_portfolio_not_found(self):
+        """GET .../onchain → 404 when no on-chain portfolio has been recorded."""
+        from src.core.exceptions import NotFoundError
+
+        with patch(
+            "src.domain.services.portfolio_service.portfolio_service.get_onchain_portfolio",
+            side_effect=NotFoundError(
+                f"On-chain portfolio for {self.user_address} not found",
+                "onchain_portfolio",
+                self.user_address,
+            ),
+        ):
+            response = self.client.get(
+                f"/api/v1/portfolios/address/{self.user_address}/onchain",
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(
+            response.status_code,
+            404,
+            f"Expected 404, got {response.status_code}: {response.data}",
+        )
+
+    def test_9_get_onchain_portfolio_blockchain_error(self):
+        """GET .../onchain → 502 when the blockchain node is unreachable."""
+        from src.core.exceptions import BlockchainError
+
+        with patch(
+            "src.domain.services.portfolio_service.portfolio_service.get_onchain_portfolio",
+            side_effect=BlockchainError("Failed to read on-chain portfolio: timeout"),
+        ):
+            response = self.client.get(
+                f"/api/v1/portfolios/address/{self.user_address}/onchain",
+                headers=self._auth_headers(),
+            )
+        self.assertEqual(
+            response.status_code,
+            502,
+            f"Expected 502, got {response.status_code}: {response.data}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

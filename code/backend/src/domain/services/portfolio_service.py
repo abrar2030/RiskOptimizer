@@ -2,7 +2,7 @@ import logging
 from decimal import Decimal, getcontext
 from typing import Any, Dict, List, Optional
 
-from src.core.exceptions import NotFoundError, ValidationError
+from src.core.exceptions import BlockchainError, NotFoundError, ValidationError
 from src.domain.services.audit_service import audit_service
 from src.infrastructure.cache.redis_cache import redis_cache
 from src.infrastructure.database.repositories.portfolio_repository import (
@@ -81,6 +81,197 @@ class PortfolioService:
             self.cache.set(cache_key, serializable_portfolio_data, ttl=300)
             logger.info(f"Retrieved portfolio for address {user_address}")
             return portfolio_data
+
+    def get_onchain_portfolio(self, user_address: str) -> Dict[str, Any]:
+        """
+        Retrieves a user's portfolio directly from the blockchain
+        (PortfolioTracker contract), independent of the database-backed
+        portfolio returned by get_portfolio_by_address. Useful for
+        verifying on-chain state matches what's recorded off-chain, or for
+        users who only ever interact via the smart contract directly.
+
+        Raises:
+            ValidationError: If the user address is invalid.
+            NotFoundError: If no portfolio has ever been recorded on-chain
+                for this address (version 0).
+            BlockchainError: If the blockchain node is unreachable or the
+                call otherwise fails.
+        """
+        if not user_address or not isinstance(user_address, str):
+            raise ValidationError(
+                "User address is required", "user_address", user_address
+            )
+
+        # Imported lazily so a missing/unreachable blockchain endpoint (or
+        # missing web3 dependency) only affects this specific optional
+        # feature, not every portfolio operation - the rest of
+        # PortfolioService is fully DB-backed and must keep working
+        # regardless of blockchain availability.
+        from src.services.blockchain_service import get_blockchain_service
+
+        try:
+            service = get_blockchain_service()
+            if not service.validate_address(user_address):
+                raise ValidationError(
+                    "Invalid Ethereum address", "user_address", user_address
+                )
+            onchain_data = service.get_portfolio(user_address)
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Error reading on-chain portfolio: {e}", exc_info=True)
+            raise BlockchainError(f"Failed to read on-chain portfolio: {e}") from e
+
+        if onchain_data is None:
+            raise BlockchainError("Blockchain call failed unexpectedly")
+        if onchain_data.get("version", 0) == 0:
+            raise NotFoundError(
+                f"On-chain portfolio for {user_address} not found",
+                "onchain_portfolio",
+                user_address,
+            )
+
+        logger.info(f"Retrieved on-chain portfolio for address {user_address}")
+        return onchain_data
+
+    def get_onchain_transactions(
+        self, portfolio_id: int, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get an individual buy/sell/rebalance transaction log for a
+        portfolio from the PortfolioLedger contract, keyed by the
+        portfolio's associated on-chain wallet address
+        (Portfolio.user_address).
+
+        Distinct from get_onchain_portfolio(): that reads the current
+        PortfolioTracker allocation snapshot for an address directly; this
+        reads the append-only PortfolioLedger transaction history for the
+        address associated with a specific database portfolio record.
+
+        Raises:
+            NotFoundError: If the portfolio doesn't exist, or has no
+                associated wallet address.
+            BlockchainError: If the blockchain node is unreachable or the
+                call otherwise fails.
+        """
+        portfolio = self.portfolio_repo.get_by_id(portfolio_id)
+        if not portfolio:
+            raise NotFoundError(
+                f"Portfolio {portfolio_id} not found", "portfolio", str(portfolio_id)
+            )
+        if not portfolio.user_address:
+            raise NotFoundError(
+                f"Portfolio {portfolio_id} has no associated wallet address",
+                "portfolio",
+                str(portfolio_id),
+            )
+
+        from src.services.blockchain_service import get_blockchain_service
+
+        try:
+            service = get_blockchain_service()
+            raw_transactions = service.get_ledger_transactions(
+                portfolio.user_address, limit=limit
+            )
+        except Exception as e:
+            logger.error(f"Error reading on-chain transactions: {e}", exc_info=True)
+            raise BlockchainError(f"Failed to read on-chain transactions: {e}") from e
+
+        transactions = [
+            {
+                "tx_hash": tx["tx_hash"],
+                "action": tx["action"].lower(),
+                "symbol": tx["symbol"],
+                "quantity": tx["quantity"],
+                "value": tx["quantity"] * tx["price"],
+                "timestamp": tx["timestamp"] * 1000,  # seconds -> ms for JS Date
+                "status": tx["status"],
+                "block_number": tx["block_number"],
+                "explorer_url": tx["explorer_url"],
+            }
+            for tx in raw_transactions
+        ]
+        logger.info(
+            f"Retrieved {len(transactions)} on-chain transactions for portfolio {portfolio_id}"
+        )
+        return transactions
+
+    def verify_onchain_integrity(self, portfolio_id: int) -> Dict[str, Any]:
+        """
+        Compare a portfolio's database-recorded allocations against its
+        current on-chain PortfolioTracker state.
+
+        Raises:
+            NotFoundError: If the portfolio doesn't exist, or has no
+                associated wallet address.
+        """
+        portfolio = self.portfolio_repo.get_by_id(portfolio_id)
+        if not portfolio:
+            raise NotFoundError(
+                f"Portfolio {portfolio_id} not found", "portfolio", str(portfolio_id)
+            )
+        if not portfolio.user_address:
+            raise NotFoundError(
+                f"Portfolio {portfolio_id} has no associated wallet address",
+                "portfolio",
+                str(portfolio_id),
+            )
+
+        from src.services.blockchain_service import get_blockchain_service
+
+        try:
+            service = get_blockchain_service()
+            onchain = service.get_portfolio(portfolio.user_address)
+        except Exception as e:
+            logger.error(f"Error verifying on-chain integrity: {e}", exc_info=True)
+            # A verification check should report "unverified", not error
+            # out, when the chain is temporarily unreachable - the caller
+            # still gets a usable (if inconclusive) response.
+            return {
+                "verified": False,
+                "blockchain": self._get_network_name(),
+                "last_verification": None,
+                "reason": f"Blockchain unreachable: {e}",
+            }
+
+        import time as _time
+
+        if onchain is None or onchain.get("version", 0) == 0:
+            return {
+                "verified": False,
+                "blockchain": self._get_network_name(),
+                "last_verification": int(_time.time() * 1000),
+                "reason": "No on-chain portfolio recorded for this address",
+            }
+
+        db_allocations = {
+            alloc.asset_symbol: float(alloc.percentage)
+            for alloc in (portfolio.allocations or [])
+        }
+        onchain_allocations = dict(zip(onchain["assets"], onchain["allocations"]))
+        # DB fractions/percentages and on-chain fractions are compared with
+        # a small tolerance for rounding rather than exact equality.
+        matches = len(db_allocations) == len(onchain_allocations) and all(
+            asset in onchain_allocations
+            and abs(onchain_allocations[asset] * 100 - pct) < 0.5
+            for asset, pct in db_allocations.items()
+        )
+
+        return {
+            "verified": matches,
+            "blockchain": self._get_network_name(),
+            "last_verification": int(_time.time() * 1000),
+            "onchain_version": onchain.get("version"),
+            "onchain_updated_at": onchain.get("updated_at"),
+        }
+
+    def _get_network_name(self) -> str:
+        try:
+            from src.services.blockchain_service import get_blockchain_service
+
+            return get_blockchain_service().network_config.get("name", "unknown")
+        except Exception:
+            return "unknown"
 
     def save_portfolio(
         self,

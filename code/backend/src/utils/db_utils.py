@@ -103,7 +103,7 @@ def receive_before_cursor_execute(
     statement: object,
     parameters: object,
     context: object,
-    executemany: "np.ndarray | pd.DataFrame | list",
+    executemany: bool,
 ) -> object:
     """Record query start time."""
     context._query_start_time = time.time()
@@ -116,7 +116,7 @@ def receive_after_cursor_execute(
     statement: object,
     parameters: object,
     context: object,
-    executemany: "np.ndarray | pd.DataFrame | list",
+    executemany: bool,
 ) -> object:
     """Log query execution time."""
     if hasattr(context, "_query_start_time"):

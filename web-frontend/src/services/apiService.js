@@ -125,6 +125,8 @@ const endpoints = {
 
   // Portfolio
   getPortfolio: (address) => `/api/v1/portfolios/address/${address}`,
+  getOnchainPortfolio: (address) =>
+    `/api/v1/portfolios/address/${address}/onchain`,
   getPortfolioByUserId: (userId) => `/api/v1/portfolios/user/${userId}`,
   getAllPortfolios: "/api/v1/portfolios",
   createPortfolio: "/api/v1/portfolios",
@@ -184,6 +186,11 @@ const apiService = {
   portfolio: {
     getByAddress: async (address) => {
       const response = await api.get(endpoints.getPortfolio(address));
+      return response.data;
+    },
+
+    getOnchain: async (address) => {
+      const response = await api.get(endpoints.getOnchainPortfolio(address));
       return response.data;
     },
 

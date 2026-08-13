@@ -30,7 +30,13 @@ jest.mock(
 const renderMarketScreen = () => {
   // Add Context Providers if needed
   return render(
-    <MarketScreen navigation={{/* mock navigation if needed */}} />,
+    <MarketScreen
+      navigation={
+        {
+          /* mock navigation if needed */
+        }
+      }
+    />,
   );
 };
 

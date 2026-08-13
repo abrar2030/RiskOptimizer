@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4

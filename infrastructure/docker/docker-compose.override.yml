@@ -9,12 +9,25 @@ services:
       FLASK_ENV: development
       LOG_LEVEL: DEBUG
       ENABLE_DEBUG_MODE: "true"
+      # Point at the local Hardhat node (see the `blockchain` service below).
+      BLOCKCHAIN_PROVIDER: http://blockchain:8545
     # Mount backend source for hot reload in development
     volumes:
       - type: bind
         source: ../../code/backend
         target: /app
         read_only: false
+      # /app plays the role of code/backend at runtime (see Dockerfile);
+      # mount its actual siblings at the same container paths so the
+      # sys.path-based blockchain/quant_ml imports resolve in dev too.
+      - type: bind
+        source: ../../code/blockchain
+        target: /blockchain
+        read_only: false
+      - type: bind
+        source: ../../code/quant_ml
+        target: /quant_ml
+        read_only: true
       - type: tmpfs
         target: /tmp
       - type: tmpfs
@@ -39,3 +52,32 @@ services:
     # Expose redis directly in dev for local tooling
     ports:
       - "6379:6379"
+
+  # ── Local blockchain node (dev only) ────────────────────────────────────
+  # A Hardhat node for local development, so `backend` can read/write real
+  # on-chain state without needing a testnet. Not present in
+  # docker-compose.yml (production) or docker-compose.prod.yml: production
+  # points BLOCKCHAIN_PROVIDER at a real network (see infrastructure/docker/.env.example).
+  blockchain:
+    build:
+      context: ../../code/blockchain
+      dockerfile: Dockerfile
+    image: riskoptimizer/blockchain-dev:local
+    container_name: riskoptimizer-blockchain
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8545:8545"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:8545',()=>process.exit(0)).on('error',()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend

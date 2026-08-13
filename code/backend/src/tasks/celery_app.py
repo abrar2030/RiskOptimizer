@@ -7,6 +7,7 @@ import logging
 import os
 from datetime import datetime
 from functools import wraps
+from typing import Any, Dict
 
 import redis
 from celery import Celery
@@ -123,7 +124,7 @@ class TaskResultManager:
         self.redis_client = redis_client
 
     def store_task_progress(
-        self, task_id: str, progress_data: "np.ndarray | pd.DataFrame | list"
+        self, task_id: str, progress_data: Dict[str, Any]
     ) -> object:
         """Store task progress information."""
         if not self.redis_client:
@@ -145,9 +146,7 @@ class TaskResultManager:
         except Exception:
             return {}
 
-    def store_task_metadata(
-        self, task_id: str, metadata: "np.ndarray | pd.DataFrame | list"
-    ) -> object:
+    def store_task_metadata(self, task_id: str, metadata: Dict[str, Any]) -> object:
         """Store task metadata."""
         if not self.redis_client:
             return

@@ -82,6 +82,7 @@ contract RiskManagement {
     error Unauthorised();
     error InvalidParams();
     error StalePrice(uint256 age);
+    error InvalidPrice(uint256 roundIndex);
     error InsufficientHistory(uint256 available, uint256 required);
 
     // ─── Constants ───────────────────────────────────────────────────────────
@@ -168,29 +169,32 @@ contract RiskManagement {
         if (block.timestamp - updatedAt > MAX_PRICE_AGE)
             revert StalePrice(block.timestamp - updatedAt);
 
-        uint8 dec = priceFeed.decimals();
-        uint256 scale = 10 ** uint256(dec);
+        // Note: no explicit decimal-scale normalisation is needed here.
+        // calculateVolatility works on ratios of consecutive prices
+        // (diff / prices[i+1]), so the feed's fixed decimal precision
+        // cancels out; only self-consistency across rounds matters.
 
         // Collect prices (one per simulated day, stepping back one round at a time)
         uint256[] memory prices = new uint256[](lookbackDays);
         for (uint256 i; i < lookbackDays; ++i) {
             uint80 roundId = uint80(uint256(latestRoundId) - i);
             (, int256 price, , , ) = priceFeed.getRoundData(roundId);
-            if (price <= 0) revert StalePrice(i);
+            if (price <= 0) revert InvalidPrice(i);
             prices[i] = uint256(price);
         }
 
-        // Compute log-returns × 10 000 (scaled integers to avoid floats)
-        // Approximation: log(p_t / p_{t-1}) ≈ (p_t - p_{t-1}) / p_{t-1}
+        // Compute absolute log-returns × 10 000 (scaled integers to avoid floats)
+        // Approximation: |log(p_t / p_{t-1})| ≈ |p_t - p_{t-1}| / p_{t-1}
+        // Both upward and downward moves must contribute to the return series,
+        // otherwise volatility is systematically understated during uptrends.
         uint256[] memory returns_ = new uint256[](lookbackDays - 1);
         uint256 mean;
         for (uint256 i; i < lookbackDays - 1; ++i) {
-            uint256 ret;
-            if (prices[i] >= prices[i + 1]) {
-                ret =
-                    ((prices[i] - prices[i + 1]) * BASIS_POINTS) /
-                    prices[i + 1];
-            }
+            uint256 diff =
+                prices[i] >= prices[i + 1]
+                    ? prices[i] - prices[i + 1]
+                    : prices[i + 1] - prices[i];
+            uint256 ret = (diff * BASIS_POINTS) / prices[i + 1];
             returns_[i] = ret;
             mean += ret;
         }
