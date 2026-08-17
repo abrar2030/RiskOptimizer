@@ -1,26 +1,25 @@
 # RiskOptimizer
 
-![CI/CD Status](https://img.shields.io/github/actions/workflow/status/quantsingularity/RiskOptimizer/cicd.yml?branch=main&label=CI/CD&logo=github)
-[![Test Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/quantsingularity/RiskOptimizer/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![CI/CD Status](https://img.shields.io/github/actions/workflow/status/quantsingularity/RiskOptimizer/cicd.yml?branch=main&label=CI%2FCD&logo=github)
 
 ## AI-Powered Portfolio Risk Management Platform
 
-RiskOptimizer is an advanced portfolio risk management platform that leverages artificial intelligence and blockchain technology to help investors optimize their investment strategies and manage risk effectively.
+RiskOptimizer is a portfolio risk management platform: a Flask backend for auth, portfolios, risk, and monitoring, paired with a React web dashboard and a React Native (Expo) mobile app. A quantitative library (`code/quant_ml`) provides VaR, extreme value theory, portfolio optimization, and forecasting, backed by a genuine Solidity ledger for recording portfolio changes on-chain.
 
 <div align="center">
-  <img src="docs/images/homepage.bmp" alt="RiskOptimizer HomePage" width="80%">
+  <img src="docs/images/homepage.bmp" alt="RiskOptimizer HomePage" width="100%">
 </div>
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Project Structure](#project-structure)
-- [Key Features](#key-features)
+- [Feature Status](#feature-status)
 - [Technology Stack](#technology-stack)
 - [Architecture](#architecture)
-- [Development Workflow](#development-workflow)
 - [Installation and Setup](#installation-and-setup)
+- [Running the Stack](#running-the-stack)
+- [API Surface](#api-surface)
 - [Testing](#testing)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Documentation](#documentation)
@@ -29,338 +28,226 @@ RiskOptimizer is an advanced portfolio risk management platform that leverages a
 
 ## Overview
 
-RiskOptimizer is a comprehensive platform designed to help investors make data-driven decisions by providing advanced risk analysis, portfolio optimization, and predictive analytics. The platform combines traditional financial models with cutting-edge AI and blockchain technology to deliver accurate, transparent, and secure investment insights.
+RiskOptimizer demonstrates a portfolio risk workflow across a real, runnable codebase. The application tier (backend, smart contracts, and two clients) is wired and covered by tests. The quantitative library covers VaR (historical, parametric, and Monte Carlo), extreme value theory, GARCH volatility, Prophet-based forecasting, portfolio optimization (PyPortfolioOpt), and lexicon-based sentiment analysis (NLTK's VADER), all built on scikit-learn and statistics rather than deep learning.
 
 ## Project Structure
 
-The project is organized into several main components:
-
 ```
 RiskOptimizer/
-├── code/                   # Core backend logic, services, and shared utilities
-├── docs/                   # Project documentation
-├── infrastructure/         # DevOps, deployment, and infra-related code
-├── mobile-frontend/        # Mobile application
-├── web-frontend/           # Web dashboard
-├── scripts/                # Automation, setup, and utility scripts
-├── LICENSE                 # License information
-└── README.md               # Project overview and instructions
+├── code/
+│   ├── backend/                  # Flask service: API, auth, services, DB, tasks
+│   │   ├── src/api/controllers/  # auth, portfolio, risk, blockchain, monitoring
+│   │   ├── src/domain/services/  # auth, portfolio, risk, audit services
+│   │   ├── src/infrastructure/   # database, cache, repositories
+│   │   ├── src/services/         # blockchain_service, quant_analysis, ai_optimization
+│   │   ├── src/tasks/            # Celery background tasks
+│   │   └── tests/                # Backend test suite (unit and integration)
+│   ├── blockchain/               # Hardhat project
+│   │   ├── contracts/            # PortfolioLedger, PortfolioTracker, RiskManagement
+│   │   └── test/                 # Hardhat test suite
+│   └── quant_ml/
+│       ├── risk_engine/          # Parallel Monte Carlo (joblib + multiprocessing)
+│       ├── risk_models/          # VaR, extreme value theory, GARCH, MLP regressor
+│       ├── ai_models/            # PyPortfolioOpt optimization, Prophet + VADER sentiment
+│       └── tests/                # quant_ml test suite
+├── web-frontend/                 # React (Vite) dashboard
+├── mobile-frontend/              # React Native + Expo app
+├── infrastructure/               # Docker, Kubernetes, Terraform, Ansible, monitoring
+├── scripts/                      # Setup, run, test, and deploy scripts
+├── docs/                         # Documentation (this directory)
+└── README.md
 ```
 
-## Key Features
+## Feature Status
 
-### Risk Analysis
+### Application tier (wired and tested)
 
-| Feature                             | Description                                                                                |
-| :---------------------------------- | :----------------------------------------------------------------------------------------- |
-| **Value at Risk (VaR) Calculation** | Estimate potential losses using historical simulation, parametric, and Monte Carlo methods |
-| **Stress Testing**                  | Simulate portfolio performance under extreme market conditions                             |
-| **Correlation Analysis**            | Identify relationships between assets to optimize diversification                          |
-| **Volatility Forecasting**          | Predict market volatility using GARCH models and machine learning                          |
-
-### Portfolio Optimization
-
-| Feature                                    | Description                                              |
-| :----------------------------------------- | :------------------------------------------------------- |
-| **Modern Portfolio Theory Implementation** | Optimize asset allocation based on risk-return profiles  |
-| **Multi-objective Optimization**           | Balance risk, return, and other constraints              |
-| **Rebalancing Recommendations**            | Receive suggestions for portfolio adjustments            |
-| **Tax-efficient Strategies**               | Minimize tax impact while maintaining optimal allocation |
-
-### AI-Powered Predictions
-
-| Feature                          | Description                                                               |
-| :------------------------------- | :------------------------------------------------------------------------ |
-| **Market Trend Prediction**      | Forecast market movements using deep learning models                      |
-| **Anomaly Detection**            | Identify unusual market patterns that may indicate opportunities or risks |
-| **Sentiment Analysis**           | Analyze news and social media to gauge market sentiment                   |
-| **Personalized Recommendations** | Receive tailored investment advice based on risk tolerance                |
-
-### Blockchain Integration
-
-| Feature                             | Description                                             |
-| :---------------------------------- | :------------------------------------------------------ |
-| **Transparent Transaction Records** | Immutable history of portfolio changes                  |
-| **Smart Contract Automation**       | Automate investment rules and risk management protocols |
-| **Decentralized Identity**          | Secure user authentication and data protection          |
-| **Tokenized Assets**                | Support for digital asset investments and tracking      |
+| Component                     | Details                                                                                                                                                                                                                                                                            |
+| :---------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**                       | Flask backend exposing endpoints under `/api/v1` for auth, portfolios, risk, blockchain, and monitoring, plus Celery-backed background tasks for reports and maintenance.                                                                                                          |
+| **Auth**                      | JWT sessions (PyJWT) with bcrypt password hashing. `SECRET_KEY`, `JWT_SECRET_KEY`, and `DATA_ENCRYPTION_KEY` are required environment variables in production; the app raises on startup if they're missing there.                                                                 |
+| **Risk calculations**         | VaR (historical, parametric, and Monte Carlo), CVaR, Sharpe ratio, max drawdown, and an efficient frontier, computed in the domain and quant_ml layers.                                                                                                                            |
+| **Parallel risk engine**      | A Monte Carlo engine that distributes simulation batches across CPU cores with joblib and multiprocessing.                                                                                                                                                                         |
+| **Portfolio optimization**    | PyPortfolioOpt-based allocation, plus a scikit-learn `MLPRegressor` used as a lightweight risk model.                                                                                                                                                                              |
+| **Forecasting and sentiment** | Prophet for price forecasting and NLTK's VADER lexicon analyzer for sentiment, both genuinely wired into `quant_ml/ai_models`.                                                                                                                                                     |
+| **Smart contracts**           | Hardhat-managed Solidity contracts: `PortfolioLedger` and `PortfolioTracker` for recording portfolio state on-chain, and a `RiskManagement` contract, read and written via web3.py in `blockchain_service.py`.                                                                     |
+| **Web dashboard**             | React app (JavaScript, not TypeScript) with Material-UI components, Recharts for charts, and React Query for data fetching, covering Home, Dashboard, Portfolio Management, Portfolio Optimization, Risk Analysis, Optimization, Monitoring, Settings, and authentication screens. |
+| **Mobile app**                | React Native (Expo) app covering the same functional areas through React Navigation, with React Context (not Redux) for auth and theme state.                                                                                                                                      |
 
 ## Technology Stack
 
-### Backend
-
-| Component      | Technologies                                                               |
-| :------------- | :------------------------------------------------------------------------- |
-| **Languages**  | Python (core logic), JavaScript/JSX (frontend), Solidity (smart contracts) |
-| **Frameworks** | Flask + Flasgger (REST API with Swagger docs)                              |
-| **Database**   | PostgreSQL, MongoDB                                                        |
-| **AI/ML**      | TensorFlow, PyTorch, scikit-learn                                          |
-| **Blockchain** | Ethereum, Solidity, Web3.py                                                |
-
-### Frontend
-
-| Component              | Technologies                    |
-| :--------------------- | :------------------------------ |
-| **Framework**          | React with TypeScript           |
-| **State Management**   | Redux                           |
-| **Data Visualization** | D3.js, Recharts                 |
-| **Styling**            | Tailwind CSS, Styled Components |
-| **Web3**               | ethers.js, web3.js              |
-
-### Infrastructure
-
-| Component            | Technologies               |
-| :------------------- | :------------------------- |
-| **Containerization** | Docker                     |
-| **Orchestration**    | Kubernetes                 |
-| **CI/CD**            | GitHub Actions             |
-| **Monitoring**       | Prometheus, Grafana        |
-| **Cloud**            | AWS, Google Cloud Platform |
+| Area             | Technology                                                                                                             |
+| :--------------- | :--------------------------------------------------------------------------------------------------------------------- |
+| Backend API      | Python 3.11+, Flask, Gunicorn, Flasgger (Swagger docs)                                                                 |
+| Auth             | PyJWT, bcrypt, passlib                                                                                                 |
+| Data layer       | SQLAlchemy 2, Alembic, PostgreSQL, Redis                                                                               |
+| Background tasks | Celery                                                                                                                 |
+| Quant / ML       | scikit-learn (MLPRegressor), statsmodels, arch (GARCH), Prophet, PyPortfolioOpt, NLTK (VADER sentiment)                |
+| Blockchain       | Solidity, Hardhat, web3.py, eth-account                                                                                |
+| Web frontend     | React 18, JavaScript, Vite, Material-UI, Recharts, React Query, Tailwind CSS                                           |
+| Mobile frontend  | React Native, Expo, React Navigation, React Context                                                                    |
+| Infrastructure   | Docker, Docker Compose, Kubernetes, Terraform, Ansible                                                                 |
+| Monitoring       | Prometheus, Grafana, prometheus-client, structlog                                                                      |
+| CI/CD            | GitHub Actions                                                                                                         |
+| Testing          | pytest (backend), Hardhat (contracts); quant_ml and mobile have their own test suites, though neither runs in CI today |
 
 ## Architecture
 
-RiskOptimizer follows a microservices architecture with the following components:
-
 ```
-RiskOptimizer/
-├── Backend Services
-│   ├── Risk Analysis Service
-│   ├── Portfolio Optimization Service
-│   ├── Market Data Service
-│   ├── AI Prediction Service
-│   └── Blockchain Integration Service
-├── Frontend Applications
-│   ├── Web Dashboard
-│   └── Mobile App
-├── Data Processing Pipeline
-│   ├── Data Collection
-│   ├── Feature Engineering
-│   ├── Model Training
-│   └── Inference Engine
-└── Infrastructure
-    ├── Database Cluster
-    ├── Kubernetes Deployment
-    ├── CI/CD Pipeline
-    └── Monitoring Stack
+Clients
+  ├── web-frontend (React)               ── HTTP/JSON ──┐
+  └── mobile-frontend (React Native)     ── HTTP/JSON ──┤
+                                                        ▼
+Backend (Flask, /api/v1)
+  ├── Controllers  auth, portfolio, risk, blockchain, monitoring
+  ├── Domain       auth, portfolio, risk, audit services
+  ├── Tasks        Celery background jobs (reports, maintenance, risk, portfolio)
+  ├── Services      blockchain_service (web3.py), quant_analysis, ai_optimization
+  └── Data layer     PostgreSQL (SQLAlchemy + Alembic), Redis
+
+Blockchain (Hardhat / Solidity)
+  PortfolioLedger · PortfolioTracker · RiskManagement
+
+Quant library (code/quant_ml)
+  risk_engine (parallel Monte Carlo) · risk_models (VaR, EVT, GARCH, MLP)
+  ai_models (PyPortfolioOpt, Prophet, VADER sentiment)
 ```
 
-## Development Workflow
-
-### Core Algorithms
-
-| Algorithm Type                     | Purpose                                        |
-| :--------------------------------- | :--------------------------------------------- |
-| **Neural Networks**                | Predictive modeling                            |
-| **Markowitz Model**                | Portfolio allocation (Optimization algorithms) |
-| **Time Series Forecasting Models** | Market prediction                              |
-| **Natural Language Processing**    | Sentiment analysis                             |
-
-### 1. Blockchain Integration
-
-| Step                      | Description                                              |
-| :------------------------ | :------------------------------------------------------- |
-| **Smart Contracts**       | Develop for secure transaction tracking                  |
-| **Blockchain Connection** | Connect to Ethereum or Solana using web3.js or ethers.js |
-| **Identity**              | Implement decentralized identity and authentication      |
-
-### 2. AI Model Development
-
-| Step                    | Description                                                                      |
-| :---------------------- | :------------------------------------------------------------------------------- |
-| **Model Training**      | Train models on historical market data for predictive analytics and optimization |
-| **Asset Performance**   | Use regression models to forecast asset performance                              |
-| **Adaptive Strategies** | Implement reinforcement learning for adaptive portfolio strategies               |
-
-### 3. Backend Development
-
-| Step                | Description                                                               |
-| :------------------ | :------------------------------------------------------------------------ |
-| **API Building**    | Build APIs to fetch blockchain data and process AI-driven recommendations |
-| **Data Handling**   | Securely handle user data and portfolio analytics                         |
-| **Data Processing** | Implement real-time data processing pipelines                             |
-
-### 4. Frontend Development
-
-| Step                | Description                                                                  |
-| :------------------ | :--------------------------------------------------------------------------- |
-| **Dashboards**      | Create dashboards with React.js and integrate interactive charts using D3.js |
-| **User Interfaces** | Develop intuitive user interfaces for complex financial data                 |
-| **Responsiveness**  | Implement responsive design for cross-device compatibility                   |
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detail.
 
 ## Installation and Setup
 
-### 1. Clone the Repository
+Prerequisites: Python 3.11+ and Node.js 18+.
 
 ```bash
 git clone https://github.com/quantsingularity/RiskOptimizer.git
 cd RiskOptimizer
 
-# Run the setup script to configure the environment
-./setup_environment.sh
-```
+# Blockchain
+cd code/blockchain
+npm install
 
-### 3. Install Backend Dependencies
-
-```bash
-cd code/backend
+# Backend
+cd ../backend
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-### 4. Install Frontend Dependencies
+# Quant library
+cd ../quant_ml
+pip install -r requirements.txt
 
-```bash
-cd code/frontend
+# Web frontend
+cd ../../web-frontend
+npm install
+
+# Mobile frontend
+cd ../mobile-frontend
 npm install
 ```
 
-### 5. Deploy Smart Contracts
+For an automated setup:
 
 ```bash
-cd code/blockchain
-npx hardhat compile
-npx hardhat deploy --network <network_name>
+git clone https://github.com/quantsingularity/RiskOptimizer.git
+cd RiskOptimizer
+./scripts/setup_environment.sh
+./scripts/run_riskoptimizer.sh
 ```
 
-### 6. Start the Application
+Full, environment-specific instructions are in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## Running the Stack
 
 ```bash
-# Start the entire application using the convenience script
-./run_riskoptimizer.sh
+# 1) Supporting services (from infrastructure/docker, Docker required)
+docker compose -f docker-compose.yml up -d postgres redis
 
-# Or start components individually
-# Start Backend
-cd code/backend
-python app.py
+# 2) Local chain (from code/blockchain)
+npx hardhat node                   # local chain at http://127.0.0.1:8545
 
-# Start Frontend
-cd code/frontend
-npm start
+# 3) Backend (from code/backend, venv active)
+python app.py                      # serves http://0.0.0.0:5000
+
+# 4) Celery worker, optional (from code/backend, venv active)
+celery -A src.tasks.celery_app worker --loglevel=info
+
+# 5) Web dashboard (from web-frontend)
+npm run dev
+
+# 6) Mobile app (from mobile-frontend)
+npm start                          # press w for web, a for Android, i for iOS
 ```
 
-## Model Performance
+See [docs/USAGE.md](docs/USAGE.md) and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-RiskOptimizer's quantitative and ML models are validated against held-out historical data.
-Full tearsheets are in **[docs/ML_MODEL_PERFORMANCE.md](docs/ML_MODEL_PERFORMANCE.md)**.
+## API Surface
 
-| Model / Method                 | Key Metric           | Value   |
-| ------------------------------ | -------------------- | ------- |
-| GBM VaR (95 %)                 | Kupiec p-value       | 0.68 ✅ |
-| Hybrid VaR (GBM + Historical)  | Coverage             | 95.1 %  |
-| EVT (POT) — TSLA 99 % VaR      | EVT VaR              | 9.87 %  |
-| Max-Sharpe Portfolio           | Out-of-sample Sharpe | 1.15    |
-| Parallel Monte Carlo (8 cores) | Speedup              | 5.9×    |
-| Prophet Forecast (AAPL)        | MAPE                 | 3.81 %  |
+Base URL `http://localhost:5000`.
+
+| Group      | Prefix               | Highlights                                                                               |
+| :--------- | :------------------- | :--------------------------------------------------------------------------------------- |
+| Auth       | `/api/v1/auth`       | `register`, `login`, `refresh`, `logout`                                                 |
+| Portfolio  | `/api/v1/portfolios` | `address/{address}`, `address/{address}/onchain`, `save`, `{id}`, `user/{user_id}`       |
+| Risk       | `/api/v1/risk`       | `var`, `cvar`, `sharpe-ratio`, `max-drawdown`, `portfolio-metrics`, `efficient-frontier` |
+| Blockchain | `/api/v1/blockchain` | `transactions/{portfolio_id}`, `verify/{portfolio_id}`                                   |
+| Monitoring | `/api/v1/monitoring` | `performance`, `endpoints`, `system`, `cache`, `database`, `optimize`                    |
+
+Full request and response shapes are in [docs/API.md](docs/API.md).
 
 ## Testing
 
-The project maintains comprehensive test coverage across all components to ensure reliability and accuracy.
-
-### Test Coverage
-
-| Component              | Coverage | Status |
-| :--------------------- | :------- | :----- |
-| Risk Analysis Service  | 92%      | ✅     |
-| Portfolio Optimization | 88%      | ✅     |
-| Market Data Service    | 85%      | ✅     |
-| AI Prediction Models   | 80%      | ✅     |
-| Blockchain Integration | 82%      | ✅     |
-| Frontend Components    | 83%      | ✅     |
-| Overall                | 85%      | ✅     |
-
-### Unit Tests
-
-| Test Type               | Description                               |
-| :---------------------- | :---------------------------------------- |
-| **Backend API**         | Endpoint tests using pytest               |
-| **Frontend Components** | Tests with Jest and React Testing Library |
-| **Smart Contracts**     | Tests with Truffle/Hardhat                |
-| **AI Models**           | Model validation tests                    |
-
-### Integration Tests
-
-| Test Type         | Description                       |
-| :---------------- | :-------------------------------- |
-| **End-to-End**    | Tests for complete user workflows |
-| **API**           | API integration tests             |
-| **Blockchain**    | Blockchain interaction tests      |
-| **Data Pipeline** | Data pipeline validation          |
-
-### Performance Tests
-
-| Test Type                 | Description                                   |
-| :------------------------ | :-------------------------------------------- |
-| **Load Testing**          | Load testing for API endpoints                |
-| **Optimization**          | Optimization algorithm performance benchmarks |
-| **Real-time Data**        | Real-time data processing tests               |
-| **Blockchain Throughput** | Blockchain transaction throughput tests       |
-
-To run tests:
-
 ```bash
-# Backend tests
-cd code/backend
+# Backend (from code/backend)
 pytest
 
-# Frontend tests
-cd code/frontend
-npm test
-
-# Smart contract tests
-cd code/blockchain
+# Smart contracts (from code/blockchain)
 npx hardhat test
 
-# AI model tests
-cd code/ai_models
-python -m unittest discover
+# Quant library (from code/quant_ml)
+pytest
 
-# Run all tests
-python validate_project.py --run-tests
+# Web (from web-frontend)
+npm test
+
+# Mobile (from mobile-frontend)
+npm test
 ```
+
+The backend suite covers unit and integration tests for the domain services and API controllers. The Hardhat suite covers each contract individually. `quant_ml` has its own pytest suite covering model performance and a general test suite, and the mobile app has 8 real test files, but neither currently runs in CI. The web dashboard has Vitest configured but no test files yet.
 
 ## CI/CD Pipeline
 
-RiskOptimizer uses GitHub Actions for continuous integration and deployment:
+GitHub Actions (`.github/workflows/cicd.yml`) runs four jobs on push, pull request, and manual dispatch:
 
-| Stage                | Control Area                    | Institutional-Grade Detail                                                              |
-| :------------------- | :------------------------------ | :-------------------------------------------------------------------------------------- |
-| **Formatting Check** | Change Triggers                 | Enforced on all `push` and `pull_request` events to `main` and `develop`                |
-|                      | Manual Oversight                | On-demand execution via controlled `workflow_dispatch`                                  |
-|                      | Source Integrity                | Full repository checkout with complete Git history for auditability                     |
-|                      | Python Runtime Standardization  | Python 3.10 with deterministic dependency caching                                       |
-|                      | Backend Code Hygiene            | `autoflake` to detect unused imports/variables using non-mutating diff-based validation |
-|                      | Backend Style Compliance        | `black --check` to enforce institutional formatting standards                           |
-|                      | Non-Intrusive Validation        | Temporary workspace comparison to prevent unauthorized source modification              |
-|                      | Node.js Runtime Control         | Node.js 18 with locked dependency installation via `npm ci`                             |
-|                      | Web Frontend Formatting Control | Prettier checks for web-facing assets                                                   |
-|                      | Mobile Frontend Formatting      | Prettier enforcement for mobile application codebases                                   |
-|                      | Documentation Governance        | Repository-wide Markdown formatting enforcement                                         |
-|                      | Infrastructure Configuration    | Prettier validation for YAML/YML infrastructure definitions                             |
-|                      | Compliance Gate                 | Any formatting deviation fails the pipeline and blocks merge                            |
+| Job                  | Depends on          | What it does                                                                       |
+| :------------------- | :------------------ | :--------------------------------------------------------------------------------- |
+| Code Quality Checks  | -                   | Python formatter checks (autoflake, black) and a repository-wide Prettier check    |
+| Backend Tests        | Code Quality Checks | Runs the pytest suite with coverage and uploads the coverage report as an artifact |
+| Smart Contract Tests | Code Quality Checks | Compiles the contracts with Hardhat and runs the contract test suite               |
+| Frontend Build       | Code Quality Checks | Installs dependencies and produces the production web build (no test step)         |
+
+There is currently no CI job for `quant_ml` or the mobile app.
 
 ## Documentation
 
-| Document                    | Path                 | Description                                                    |
-| :-------------------------- | :------------------- | :------------------------------------------------------------- |
-| **README**                  | `README.md`          | High-level overview, project scope, and repository entry point |
-| **Installation Guide**      | `INSTALLATION.md`    | Step-by-step installation and environment setup                |
-| **API Reference**           | `API.md`             | Detailed documentation for all API endpoints                   |
-| **CLI Reference**           | `CLI.md`             | Command-line interface usage, commands, and examples           |
-| **User Guide**              | `USAGE.md`           | Comprehensive end-user guide, workflows, and examples          |
-| **Architecture Overview**   | `ARCHITECTURE.md`    | System architecture, components, and design rationale          |
-| **Configuration Guide**     | `CONFIGURATION.md`   | Configuration options, environment variables, and tuning       |
-| **Feature Matrix**          | `FEATURE_MATRIX.md`  | Feature coverage, capabilities, and roadmap alignment          |
-| **Contributing Guidelines** | `CONTRIBUTING.md`    | Contribution workflow, coding standards, and PR requirements   |
-| **Troubleshooting**         | `TROUBLESHOOTING.md` | Common issues, diagnostics, and remediation steps              |
+| Document                                                     | Contents                               |
+| :----------------------------------------------------------- | :------------------------------------- |
+| [docs/README.md](docs/README.md)                             | Documentation index                    |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                 | System architecture                    |
+| [docs/API.md](docs/API.md)                                   | REST API reference                     |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md)                 | Setup for all components               |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md)               | Environment variables and config       |
+| [docs/USAGE.md](docs/USAGE.md)                               | Running and using the platform         |
+| [docs/CLI.md](docs/CLI.md)                                   | Helper scripts reference               |
+| [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md)             | Feature status, implemented vs planned |
+| [docs/ML_MODEL_PERFORMANCE.md](docs/ML_MODEL_PERFORMANCE.md) | Model evaluation methodology           |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)           | Common issues and fixes                |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)                 | Contribution guide                     |
+| [docs/examples/](docs/examples/)                             | Worked examples                        |
 
 ## Contributing
 
-| Step             | Command/Action                                                         |
-| :--------------- | :--------------------------------------------------------------------- |
-| **Fork**         | Fork the repository                                                    |
-| **Branch**       | Create your feature branch (`git checkout -b feature/amazing-feature`) |
-| **Commit**       | Commit your changes (`git commit -m 'Add some amazing feature'`)       |
-| **Push**         | Push to the branch (`git push origin feature/amazing-feature`)         |
-| **Pull Request** | Open a Pull Request                                                    |
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
 
